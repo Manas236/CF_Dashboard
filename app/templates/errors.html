@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Errors — {{ sites[site].label }}{% endblock %}
+
+{% block content %}
+  <section class="stat-strip" id="error-stats" aria-label="Error totals">
+    <div class="stat">
+      <div class="stat-label">4xx <span class="kpi-window">{{ range_key }}</span></div>
+      <div class="stat-value" id="stat-4xx">—</div>
+      <div class="stat-sub" id="stat-4xx-sub"></div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">5xx <span class="kpi-window">{{ range_key }}</span></div>
+      <div class="stat-value" id="stat-5xx">—</div>
+      <div class="stat-sub" id="stat-5xx-sub"></div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Error rate</div>
+      <div class="stat-value" id="stat-rate">—</div>
+      <div class="stat-sub">4xx + 5xx of all est. requests</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2>When &amp; where errors happen</h2>
+        <div class="panel-controls">
+          <span class="muted panel-note" id="heatmap-note"></span>
+          <div class="seg" id="heatmap-mode">
+            <button data-mode="paths" class="active">Paths</button>
+            <button data-mode="status">Status codes</button>
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <div id="heatmap-chart" class="chart tall"></div>
+        <div class="overlay skeleton" id="heatmap-overlay"></div>
+      </div>
+      <div class="panel-foot muted" id="heatmap-foot">
+        Rows = top error-producing paths (top 300 error paths per hour are collected) ·
+        cell color = est. errors in that hour
+      </div>
+    </div>
+
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2>Top broken URLs <span class="kpi-window">{{ range_key }}</span></h2>
+        <div class="panel-controls">
+          <input class="filter-input" id="table-filter" type="search"
+                 placeholder="filter paths… (e.g. 404 or /article)">
+        </div>
+      </div>
+      <div class="chart-wrap" style="min-height:120px">
+        <div class="table-wrap">
+          <table class="data-table" id="error-table">
+            <thead>
+              <tr>
+                <th class="sortable" data-key="status">Status</th>
+                <th>Path</th>
+                <th class="sortable num sorted-desc" data-key="errors">Est. errors</th>
+                <th class="sortable num" data-key="share">% of path hits</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="overlay skeleton" id="table-overlay"></div>
+      </div>
+      <div class="panel-foot muted">
+        Click a column to sort · “% of path hits” compares errors to that URL's own
+        traffic (blank when the URL never reached the stored top-N path rollup)
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/errors.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,11 @@
+# Dev/test-only dependencies (not needed to run the dashboard).
+-r requirements.txt
+
+# Real-browser verification harness (_verify.py): loads every panel in headless
+# Chromium and checks console errors, chart init, pointer events reaching the
+# canvas, tooltips, toggles, and the light/dark theme switch.
+#   pip install -r requirements-dev.txt
+#   python -m playwright install chromium
+#   python _verify.py          # 48 checks across 6 panels
+#   python _verify.py --shots  # also writes screenshots to _shots/
+playwright>=1.40

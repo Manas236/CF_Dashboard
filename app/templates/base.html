@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Newsroom Analytics{% endblock %}</title>
+  <!-- set theme before first paint to avoid a flash -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("dash-theme");
+        if (t === "light" || t === "dark")
+          document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <div>
+          <div class="brand-name">Newsroom&nbsp;Analytics</div>
+          <div class="brand-sub">Cloudflare GraphQL · Free plan</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <div class="nav-section">Panels</div>
+        {% set q = {'site': site, 'range': range_key} %}
+        <a class="nav-item {{ 'active' if request.endpoint == 'main.dashboard' }}"
+           href="{{ url_for('main.dashboard', **q) }}">Overview</a>
+        <a class="nav-item {{ 'active' if request.endpoint == 'main.articles' }}"
+           href="{{ url_for('main.articles', **q) }}">Top articles</a>
+        <a class="nav-item {{ 'active' if request.endpoint == 'main.categories' }}"
+           href="{{ url_for('main.categories', **q) }}">Categories</a>
+        <a class="nav-item {{ 'active' if request.endpoint == 'main.errors' }}"
+           href="{{ url_for('main.errors', **q) }}">Errors</a>
+        <a class="nav-item {{ 'active' if request.endpoint == 'main.audience' }}"
+           href="{{ url_for('main.audience', **q) }}">Bots &amp; AI</a>
+        <a class="nav-item {{ 'active' if request.endpoint == 'main.geo' }}"
+           href="{{ url_for('main.geo', **q) }}">World</a>
+      </nav>
+      <div class="sidebar-foot">
+        All numbers are <strong>estimates</strong> from Cloudflare's adaptively
+        sampled data (count × sampleInterval), eyeball traffic only.
+      </div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <div class="controls">
+          <label class="site-select-wrap">
+            <select id="site-select" aria-label="Site">
+              {% for key, s in sites.items() %}
+                <option value="{{ key }}" {% if key == site %}selected{% endif %}>{{ s.label }} · {{ key }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <nav class="range-pills" aria-label="Time range">
+            {% for r in ranges %}
+              <a class="pill {% if r == range_key %}active{% endif %}"
+                 href="{{ url_for(request.endpoint, site=site, range=r) }}">{{ r }}</a>
+            {% endfor %}
+          </nav>
+        </div>
+        <div class="topbar-meta">
+          <span class="badge" id="source-badge" hidden></span>
+          <span class="muted" id="updated-at"></span>
+          <button class="theme-toggle" id="theme-toggle" type="button"
+                  aria-label="Toggle light / dark theme" title="Toggle theme">
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+            </svg>
+          </button>
+          <form action="{{ url_for('auth.logout') }}" method="post" class="logout-form">
+            <button class="theme-toggle" type="submit" aria-label="Log out" title="Log out">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+            </button>
+          </form>
+        </div>
+      </header>
+      <main class="content">{% block content %}{% endblock %}</main>
+    </div>
+  </div>
+  <script>
+    window.DASH = { site: {{ site|tojson }}, range: {{ range_key|tojson }} };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
+  <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

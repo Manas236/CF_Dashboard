@@ -1,0 +1,6 @@
+Flask>=3.0
+python-dotenv>=1.0
+requests>=2.31
+PyMySQL>=1.1
+# PyMySQL needs cryptography for MySQL 8's default caching_sha2_password auth
+cryptography>=42.0

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Bots &amp; AI — {{ sites[site].label }}{% endblock %}
+
+{% block content %}
+  <section class="grid">
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2>Audience composition <span class="kpi-window">{{ range_key }}</span></h2>
+        <div class="panel-controls">
+          <span class="muted panel-note" id="audience-note"></span>
+          <div class="seg" id="audience-mode">
+            <button data-mode="all" class="active">All traffic</button>
+            <button data-mode="human">Est. humans</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="stat-strip" id="audience-stats">
+        <div class="stat">
+          <div class="stat-label" id="stat-a-label">Total requests</div>
+          <div class="stat-value" id="stat-a">—</div>
+          <div class="stat-sub" id="stat-a-sub"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label" id="stat-b-label">Est. humans</div>
+          <div class="stat-value" id="stat-b">—</div>
+          <div class="stat-sub" id="stat-b-sub"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Search engines</div>
+          <div class="stat-value" id="stat-search">—</div>
+          <div class="stat-sub" id="stat-search-sub"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">AI crawlers</div>
+          <div class="stat-value" id="stat-ai">—</div>
+          <div class="stat-sub" id="stat-ai-sub"></div>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div id="sunburst-chart" class="chart tall"></div>
+        <div class="overlay skeleton" id="sunburst-overlay"></div>
+      </div>
+      <div class="panel-foot muted">
+        Inner ring = humans vs bots · outer rings = bot families and named bots ·
+        click a segment to zoom, click the center to zoom out ·
+        “humans” = eyeball requests minus UA-identified bots (top 500 UAs/hour
+        classified — tail UAs count as human, so bots are slightly undercounted)
+      </div>
+    </div>
+
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2 id="timeline-title">AI crawler traffic over time</h2>
+        <span class="muted panel-note" id="timeline-note"></span>
+      </div>
+      <div class="chart-wrap">
+        <div id="timeline-chart" class="chart"></div>
+        <div class="overlay skeleton" id="timeline-overlay"></div>
+      </div>
+      <div class="panel-foot muted" id="timeline-foot">
+        Stacked est. requests per hour from UA-identified AI crawlers
+        (GPTBot, ClaudeBot, OAI-SearchBot, …) — the “who's scraping us, and is it
+        growing” signal · bot list configurable in <code>app/bots.py</code>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/audience.js') }}"></script>
+{% endblock %}

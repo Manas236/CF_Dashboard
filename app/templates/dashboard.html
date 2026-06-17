@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ sites[site].label }} — Newsroom Analytics{% endblock %}
+
+{% block content %}
+  <section class="kpis" aria-label="Key metrics">
+    <div class="kpi hero">
+      <div class="kpi-label"><span class="pulse-dot"></span> Requests <span class="kpi-window">{{ range_key }}</span></div>
+      <div class="kpi-value" id="kpi-requests">—</div>
+      <div class="kpi-sub" id="kpi-requests-sub">estimated, eyeball only</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Bandwidth <span class="kpi-window">{{ range_key }}</span></div>
+      <div class="kpi-value" id="kpi-bytes">—</div>
+      <div class="kpi-sub">edge response bytes</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Error rate <span class="kpi-window">{{ range_key }}</span></div>
+      <div class="kpi-value" id="kpi-errors">—</div>
+      <div class="kpi-sub" id="kpi-errors-sub">4xx + 5xx of all requests</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Cache hit ratio <span class="kpi-window">{{ range_key }}</span></div>
+      <div class="kpi-value" id="kpi-cache">—</div>
+      <div class="kpi-sub">served from edge cache</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2>Traffic over time</h2>
+        <span class="muted panel-note" id="chart-note"></span>
+      </div>
+      <div class="chart-wrap">
+        <div id="traffic-chart" class="chart"></div>
+        <div class="overlay skeleton" id="chart-overlay"></div>
+      </div>
+      <div class="panel-foot muted">
+        Estimated requests per {{ 'minute' if range_key == '1h' else 'hour' }}
+        (adaptive sampling × sampleInterval) · times shown in your local timezone
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

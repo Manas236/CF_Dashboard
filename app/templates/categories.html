@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Categories — {{ sites[site].label }}{% endblock %}
+
+{% block content %}
+  <section class="grid">
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2>View share by category <span class="kpi-window">{{ range_key }}</span></h2>
+        <span class="muted panel-note" id="treemap-note">click a tile to drill into its top articles · breadcrumb to go back</span>
+      </div>
+      <div class="chart-wrap">
+        <div id="treemap-chart" class="chart tall"></div>
+        <div class="overlay skeleton" id="treemap-overlay"></div>
+      </div>
+      <div class="panel-foot muted">
+        Tile size = est. requests · categories derived from the leading path segment
+        (rules in <code>app/config.py · CATEGORY_RULES</code>) · assets/feeds excluded
+      </div>
+    </div>
+
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2>Category profiles <span class="kpi-window">top 5 · {{ range_key }}</span></h2>
+        <span class="muted panel-note" id="radar-note"></span>
+      </div>
+      <div class="chart-wrap">
+        <div id="radar-chart" class="chart"></div>
+        <div class="overlay skeleton" id="radar-overlay"></div>
+      </div>
+      <div class="panel-foot muted">
+        Each axis normalized 0–100 across the five categories (hover for raw values) ·
+        bot % and cache % per category aren't derivable from free-plan rollups, so the
+        profile uses view share, growth, breadth, error rate and bandwidth share
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/categories.js') }}"></script>
+{% endblock %}

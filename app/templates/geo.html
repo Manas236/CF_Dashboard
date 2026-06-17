@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}World — {{ sites[site].label }}{% endblock %}
+
+{% block content %}
+  <section class="grid">
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2>International reach <span class="kpi-window">{{ range_key }}</span></h2>
+        <div class="panel-controls">
+          <span class="muted panel-note" id="geo-note"></span>
+          <div class="seg" id="geo-mode">
+            <button data-mode="world" class="active">Beyond India</button>
+            <button data-mode="all">Include India</button>
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <div id="geo-chart" class="chart tall"></div>
+        <div class="overlay skeleton" id="geo-overlay"></div>
+      </div>
+      <div class="panel-foot muted">
+        Traffic is India-dominated, so the default view colors the rest of the world
+        on its own scale · country granularity only (free plan) · est. requests
+      </div>
+    </div>
+
+    <div class="panel span-6">
+      <div class="panel-head">
+        <h2>Top countries beyond India</h2>
+      </div>
+      <div class="chart-wrap" style="min-height:120px">
+        <ul class="geo-list" id="geo-list"></ul>
+        <div class="overlay skeleton" id="geo-list-overlay"></div>
+      </div>
+    </div>
+
+    <div class="panel span-6">
+      <div class="panel-head">
+        <h2>Reach summary</h2>
+      </div>
+      <div class="stat-strip" style="grid-template-columns:1fr 1fr; margin:0">
+        <div class="stat">
+          <div class="stat-label">India share</div>
+          <div class="stat-value" id="stat-home">—</div>
+          <div class="stat-sub" id="stat-home-sub"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">International</div>
+          <div class="stat-value" id="stat-intl">—</div>
+          <div class="stat-sub" id="stat-intl-sub"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Countries reached</div>
+          <div class="stat-value" id="stat-count">—</div>
+          <div class="stat-sub">with at least 1 sampled request</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">#1 beyond India</div>
+          <div class="stat-value" id="stat-top">—</div>
+          <div class="stat-sub" id="stat-top-sub"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="https://cdn.jsdelivr.net/npm/echarts@4.9.0/map/js/world.js"></script>
+  <script src="{{ url_for('static', filename='js/geo.js') }}"></script>
+{% endblock %}

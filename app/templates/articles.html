@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Top articles — {{ sites[site].label }}{% endblock %}
+
+{% block content %}
+  <section class="grid">
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2>Article momentum <span class="kpi-window">{{ range_key }} vs prior {{ range_key }}</span></h2>
+        <span class="muted panel-note" id="momentum-note"></span>
+      </div>
+      <div class="chart-wrap">
+        <div id="momentum-chart" class="chart tall"></div>
+        <div class="overlay skeleton" id="momentum-overlay"></div>
+      </div>
+      <div class="panel-foot muted">
+        x = est. hits this window (log scale) · y = growth vs the previous equal window
+        (capped at +500% for display) · bubble = absolute change ·
+        paths under <span id="min-hits"></span> current hits are hidden ·
+        “NEW” = no hits at all in the prior window
+      </div>
+    </div>
+
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2>Top articles <span class="kpi-window">{{ range_key }}</span></h2>
+        <span class="muted panel-note">sparklines show the last 24 h regardless of range</span>
+      </div>
+      <div class="chart-wrap" style="min-height:120px">
+        <div class="leaderboard" id="leaderboard"></div>
+        <div class="overlay skeleton" id="leaderboard-overlay"></div>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/articles.js') }}"></script>
+{% endblock %}
