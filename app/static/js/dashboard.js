@@ -53,7 +53,11 @@
       yAxis: { type: "value", axisLabel: Object.assign(D.axisLabel(), { formatter: D.fmtNum }),
         splitLine: D.splitLine() },
       series: [{
-        name: "Requests", type: "line", smooth: 0.28, symbol: "none", connectNulls: false,
+        name: "Requests", type: "line", smooth: 0.28, connectNulls: false,
+        symbol: "circle", symbolSize: 7, showSymbol: false,
+        itemStyle: { color: t.live, borderColor: t.tooltipBg, borderWidth: 2 },
+        emphasis: { scale: 1.35, itemStyle: { color: t.live, borderColor: t.tooltipBg,
+          borderWidth: 2, shadowColor: "rgba(255,84,54,0.55)", shadowBlur: 10 } },
         data: points,
         sampling: "lttb",
         lineStyle: {
