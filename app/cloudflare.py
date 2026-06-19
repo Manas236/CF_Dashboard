@@ -92,12 +92,12 @@ def _interval(group):
 
 def _est_requests(group):
     """Sampled row count -> estimated true request count."""
-    return int(round((group.get("count") or 0) * _interval(group)))
+    return int(group.get("count") or 0)
 
 
 def _est_bytes(group):
     raw = (group.get("sum") or {}).get("edgeResponseBytes") or 0
-    return int(round(raw * _interval(group)))
+    return int(raw)
 
 
 def _parse_hour(value):
