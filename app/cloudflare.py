@@ -100,12 +100,19 @@ def _est_bytes(group):
     return int(raw)
 
 
+def _est_visits(group):
+    """Cloudflare 'visits' (sessions): a request whose referer host differs
+    from the requested host, i.e. an arrival from elsewhere. Summable per hour,
+    unlike uniques. Left unscaled to match requests/bytes."""
+    return int((group.get("sum") or {}).get("visits") or 0)
+
+
 def _parse_hour(value):
     return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
 
 
 def empty_hour_totals():
-    return {"requests": 0, "bytes": 0, "raw_count": 0, "sample_interval": 1,
+    return {"requests": 0, "bytes": 0, "visits": 0, "raw_count": 0, "sample_interval": 1,
             "status": [], "cache": [], "country": []}
 
 
@@ -128,7 +135,7 @@ def fetch_range_rollup(zone_id, start, end, token):
           totalByHour: httpRequestsAdaptiveGroups(limit: {hours + 2}, filter: {flt}, orderBy: [datetimeHour_ASC]) {{
             count
             avg {{ sampleInterval }}
-            sum {{ edgeResponseBytes }}
+            sum {{ edgeResponseBytes visits }}
             dimensions {{ datetimeHour }}
           }}
           statusByHour: httpRequestsAdaptiveGroups(limit: {hours * 60}, filter: {flt}, orderBy: [count_DESC]) {{
@@ -163,6 +170,7 @@ def fetch_range_rollup(zone_id, start, end, token):
         b = bucket(g)
         b["requests"] = _est_requests(g)
         b["bytes"] = _est_bytes(g)
+        b["visits"] = _est_visits(g)
         b["raw_count"] = g.get("count") or 0
         b["sample_interval"] = _interval(g)
     for g in zone.get("statusByHour") or []:
@@ -246,7 +254,7 @@ def fetch_heavy_hours(zone_id, hour_starts, token):
 
 
 def fetch_timeseries(zone_id, start, end, token, granularity="hour"):
-    """Live time series: [{ts: ISO-8601 Z, requests, bytes}], ascending."""
+    """Live time series: [{ts: ISO-8601 Z, requests, bytes, visits}], ascending."""
     _check_zone_id(zone_id)
     dim = "datetimeHour" if granularity == "hour" else "datetimeMinute"
     flt = _time_filter(start, end)
@@ -257,7 +265,7 @@ def fetch_timeseries(zone_id, start, end, token, granularity="hour"):
           series: httpRequestsAdaptiveGroups(limit: 2000, filter: {flt}, orderBy: [{dim}_ASC]) {{
             count
             avg {{ sampleInterval }}
-            sum {{ edgeResponseBytes }}
+            sum {{ edgeResponseBytes visits }}
             dimensions {{ {dim} }}
           }}
         }}
@@ -266,7 +274,8 @@ def fetch_timeseries(zone_id, start, end, token, granularity="hour"):
     """
     zone = _zone(_graphql(query, token))
     return [
-        {"ts": g["dimensions"][dim], "requests": _est_requests(g), "bytes": _est_bytes(g)}
+        {"ts": g["dimensions"][dim], "requests": _est_requests(g),
+         "bytes": _est_bytes(g), "visits": _est_visits(g)}
         for g in zone.get("series") or []
     ]
 
@@ -282,7 +291,7 @@ def fetch_kpis(zone_id, start, end, token):
           total: httpRequestsAdaptiveGroups(limit: 1, filter: {flt}) {{
             count
             avg {{ sampleInterval }}
-            sum {{ edgeResponseBytes }}
+            sum {{ edgeResponseBytes visits }}
           }}
           byStatus: httpRequestsAdaptiveGroups(limit: {config.LIMIT_STATUS}, filter: {flt}) {{
             count
@@ -319,7 +328,82 @@ def fetch_kpis(zone_id, start, end, token):
     return {
         "requests": _est_requests(total_group),
         "bytes": _est_bytes(total_group),
+        "visits": _est_visits(total_group),
         "errors_4xx": errors_4xx,
         "errors_5xx": errors_5xx,
         "cached_requests": cached,
     }
+
+
+def fetch_uniques(zone_id, start, end, token):
+    """Estimated unique visitors (distinct client IPs) over [start, end).
+
+    The adaptive dataset has no `uniq` field, and 1mGroups is blocked on the
+    free plan, so this uses the pre-aggregated request datasets. Queried as ONE
+    group with no time dimension: Cloudflare merges the per-bucket HLL sketches
+    into a true distinct count, so a visitor seen in several buckets is counted
+    once (verified: the aggregate is well below the sum of per-bucket uniques).
+
+    Dataset depends on span because of free-plan limits:
+      - <= 3 days  -> httpRequests1hGroups (free plan rejects wider 1h queries),
+                      datetime filter, so pass a whole-hour window.
+      - >  3 days  -> httpRequests1dGroups (no 3-day cap, ~30-day retention),
+                      date filter, so pass a whole-day window (start/end at UTC
+                      midnight). date_lt is exclusive.
+    Returns an int.
+    """
+    _check_zone_id(zone_id)
+    if (end - start) <= timedelta(days=3):
+        dataset = "httpRequests1hGroups"
+        flt = f'{{datetime_geq: "{_iso(start)}", datetime_lt: "{_iso(end)}"}}'
+    else:
+        dataset = "httpRequests1dGroups"
+        flt = f'{{date_geq: "{start:%Y-%m-%d}", date_lt: "{end:%Y-%m-%d}"}}'
+    query = f"""
+    {{
+      viewer {{
+        zones(filter: {{zoneTag: "{zone_id}"}}) {{
+          total: {dataset}(limit: 1, filter: {flt}) {{
+            uniq {{ uniques }}
+          }}
+        }}
+      }}
+    }}
+    """
+    zone = _zone(_graphql(query, token))
+    groups = zone.get("total") or []
+    if not groups:
+        return 0
+    return int((groups[0].get("uniq") or {}).get("uniques") or 0)
+
+
+def fetch_daily_uniques(zone_id, start, end, token):
+    """Per-day unique visitors over [start, end) in ONE API call.
+
+    Uses httpRequests1dGroups grouped by `date` (no 3-day cap, ~30-day
+    retention). Each day's `uniques` is that day's own distinct count — these
+    are NOT additive across days (a visitor returning on two days counts once
+    per day), so the deduped multi-day total still comes from fetch_uniques.
+    Pass whole-day bounds (UTC midnight); date_lt is exclusive.
+
+    Returns {"YYYY-MM-DD": uniques}.
+    """
+    _check_zone_id(zone_id)
+    flt = f'{{date_geq: "{start:%Y-%m-%d}", date_lt: "{end:%Y-%m-%d}"}}'
+    query = f"""
+    {{
+      viewer {{
+        zones(filter: {{zoneTag: "{zone_id}"}}) {{
+          days: httpRequests1dGroups(limit: 60, filter: {flt}, orderBy: [date_ASC]) {{
+            uniq {{ uniques }}
+            dimensions {{ date }}
+          }}
+        }}
+      }}
+    }}
+    """
+    zone = _zone(_graphql(query, token))
+    out = {}
+    for g in zone.get("days") or []:
+        out[g["dimensions"]["date"]] = int((g.get("uniq") or {}).get("uniques") or 0)
+    return out

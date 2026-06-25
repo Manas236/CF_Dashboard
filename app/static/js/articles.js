@@ -18,13 +18,18 @@
     return Math.min(8 + Math.sqrt(Math.abs(change)) * 0.95, 46);
   }
 
+  // x positions on est. visits when available, else raw hits (uniform factor,
+  // so the log-scale shape is identical either way).
+  function xOf(hits) { return D.hasViews() ? Math.max(D.estViews(hits), 1) : hits; }
+
   function renderScatter() {
     if (!data) return;
     var t = D.tokens();
+    var useViews = D.hasViews();
     var series = Object.keys(CLASSES).map(function (cls) {
       var pts = data.scatter.filter(function (p) { return p.cls === cls; }).map(function (p) {
         var y = p.growth === null ? GROWTH_CAP : Math.max(-100, Math.min(p.growth, GROWTH_CAP));
-        return { value: [p.cur, y], item: p, symbolSize: bubbleSize(p.change) };
+        return { value: [xOf(p.cur), y], item: p, symbolSize: bubbleSize(p.change) };
       });
       var color = D.momentumColor(cls);
       return {
@@ -46,13 +51,14 @@
           var it = p.data.item;
           var g = it.growth === null ? "NEW (no prior hits)" : D.fmtGrowth(it.growth);
           return "<strong style='font-family:JetBrains Mono,monospace;font-size:11px'>" + it.path + "</strong>" +
-            "<div style='margin-top:4px'>current: <b>~" + D.fmtNum(it.cur) + "</b> est. hits</div>" +
-            "<div>prior: ~" + D.fmtNum(it.prior) + " est. hits</div>" +
-            "<div>growth: <b style='color:" + D.momentumColor(it.cls) + "'>" + g + "</b></div>" +
-            "<div>change: " + (it.change > 0 ? "+" : "") + D.fmtNum(it.change) + "</div>";
+            "<div style='margin-top:4px'>" + D.viewsTip(it.cur) + "</div>" +
+            "<div style='margin-top:3px'>growth: <b style='color:" + D.momentumColor(it.cls) + "'>" + g + "</b></div>" +
+            "<div>change: " + (it.change > 0 ? "+" : "") + D.fmtNum(it.change) + " hits</div>";
         }
       }),
-      xAxis: { type: "log", logBase: 10, name: "est. hits (log)", nameLocation: "middle", nameGap: 30,
+      xAxis: { type: "log", logBase: 10,
+        name: (useViews ? "est. visits (log)" : "est. hits (log)"),
+        nameLocation: "middle", nameGap: 30,
         nameTextStyle: { color: t.faint, fontSize: 11 },
         axisLine: D.axisLine(), axisLabel: Object.assign(D.axisLabel(), { formatter: D.fmtNum }),
         splitLine: D.splitLine() },
@@ -92,6 +98,16 @@
     return '<span class="growth-badge ' + cls + '">' + D.fmtGrowth(item.growth) + "</span>";
   }
 
+  // Headline = estimated visits (actual people); raw hits kept as a small
+  // secondary line. Falls back to hits alone when no visits factor is available.
+  function hitsCell(item) {
+    var v = D.estViews(item.cur);
+    if (v === null) return "~" + D.fmtNum(item.cur);
+    return "~" + D.fmtNum(v) +
+      "<div style='font-size:10px;font-weight:400;opacity:0.6;margin-top:1px'>~" +
+      D.fmtNum(item.cur) + " hits</div>";
+  }
+
   function renderLeaderboard() {
     var host = document.getElementById("leaderboard");
     host.innerHTML = "";
@@ -105,7 +121,7 @@
         '<div class="lb-path"><a href="https://' + D.site + item.path +
           '" target="_blank" rel="noopener" title="' + item.path + '">' + item.path + "</a></div>" +
         '<div class="lb-spark"></div>' +
-        '<div class="lb-hits" title="est. hits this window">~' + D.fmtNum(item.cur) + "</div>" +
+        '<div class="lb-hits" title="estimated visits · raw hits this window">' + hitsCell(item) + "</div>" +
         '<div class="lb-growth">' + growthBadge(item) + "</div>";
       host.appendChild(row);
       sparkline(row.querySelector(".lb-spark"), item.spark, color);
@@ -122,6 +138,8 @@
     }
     D.setBadge(d.source);
     D.setText("min-hits", d.min_hits);
+    D.setViewsFactor(d.views_factor);
+    D.setText("momentum-x-label", D.hasViews() ? "est. visits" : "est. hits");
     data = d;
 
     if (!d.scatter.length) {

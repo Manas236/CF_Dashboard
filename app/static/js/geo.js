@@ -47,6 +47,11 @@
     ST: "São Tomé", WS: "Samoa", TO: "Tonga", SC: "Seychelles" };
   function countryName(c) { return ISO2[c] || FALLBACK[c] || c; }
 
+  // Lead with estimated visits ("actual people") where a factor is available,
+  // else fall back to raw requests. unit() keeps the label honest either way.
+  function people(reqs) { var v = D.estViews(reqs); return v === null ? reqs : v; }
+  function unit() { return D.hasViews() ? "est. visits" : "est. requests"; }
+
   var chart = D.makeChart("geo-chart");
   var overlay = document.getElementById("geo-overlay");
   var listOverlay = document.getElementById("geo-list-overlay");
@@ -70,8 +75,9 @@
       tooltip: Object.assign(D.tooltipBase(), {
         formatter: function (p) {
           if (!p.data || p.data.value === undefined) return p.name + "<br><span style='color:" + t.dim + "'>no sampled traffic</span>";
-          var share = data.total ? " · " + D.fmtPct(p.data.value / data.total) + " of all traffic" : "";
-          return "<strong>" + p.name + "</strong><br>~" + D.fmtNum(p.data.value) + " est. requests" + share;
+          var share = data.total ? D.fmtPct(p.data.value / data.total) + " of all traffic" : "";
+          return "<strong>" + p.name + "</strong><div style='margin-top:4px'>" + D.viewsTip(p.data.value) + "</div>" +
+            (share ? "<div style='font-size:11px;color:" + t.dim + "'>" + share + "</div>" : "");
         }
       }),
       visualMap: { min: 0, max: maxV, text: ["high", "low"], left: 0, bottom: 0, calculable: false,
@@ -92,12 +98,14 @@
     host.innerHTML = "";
     intl.slice(0, 12).forEach(function (c) {
       var share = c.requests / intlTotal;
+      var hitsLine = D.hasViews()
+        ? "<div class='muted' style='font-size:10px'>~" + D.fmtNum(c.requests) + " hits</div>" : "";
       var li = document.createElement("li");
       li.innerHTML = "<div style='flex:1;min-width:0'>" +
         "<div>" + countryName(c.code) + " <span class='muted' style='font-family:JetBrains Mono,monospace'>" + c.code + "</span></div>" +
         "<div class='geo-bar' style='width:" + Math.max(share * 100, 1.5) + "%'></div></div>" +
-        "<div class='num' style='text-align:right'>~" + D.fmtNum(c.requests) +
-        "<div class='muted' style='font-size:11px'>" + D.fmtPct(share) + " of intl.</div></div>";
+        "<div class='num' style='text-align:right'>~" + D.fmtNum(people(c.requests)) +
+        "<div class='muted' style='font-size:11px'>" + D.fmtPct(share) + " of intl.</div>" + hitsLine + "</div>";
       host.appendChild(li);
     });
     if (!intl.length) host.innerHTML = "<li class='muted'>No international traffic stored in this window.</li>";
@@ -106,14 +114,14 @@
   function renderStats() {
     var intlTotal = data.total - data.home;
     D.countUp(document.getElementById("stat-home"), data.total ? data.home / data.total : 0, { fmt: D.fmtPct });
-    D.setText("stat-home-sub", "~" + D.fmtNum(data.home) + " est. requests");
+    D.setText("stat-home-sub", "~" + D.fmtNum(people(data.home)) + " " + unit());
     D.countUp(document.getElementById("stat-intl"), data.total ? intlTotal / data.total : 0, { fmt: D.fmtPct });
-    D.setText("stat-intl-sub", "~" + D.fmtNum(intlTotal) + " est. requests");
+    D.setText("stat-intl-sub", "~" + D.fmtNum(people(intlTotal)) + " " + unit());
     D.setText("stat-count", data.countries.length);
     var top = data.countries.filter(function (c) { return c.code !== data.home_country; })[0];
     if (top) {
       D.setText("stat-top", countryName(top.code));
-      D.setText("stat-top-sub", "~" + D.fmtNum(top.requests) + " est. requests");
+      D.setText("stat-top-sub", "~" + D.fmtNum(people(top.requests)) + " " + unit());
     }
   }
 
@@ -136,7 +144,8 @@
     }
     data = d;
     D.setBadge(d.source);
-    D.setText("geo-note", d.countries.length + " countries · ~" + D.fmtNum(d.total) + " est. requests");
+    D.setViewsFactor(d.views_factor);
+    D.setText("geo-note", d.countries.length + " countries · ~" + D.fmtNum(people(d.total)) + " " + unit());
     renderStats();
     renderList();
     D.ready(listOverlay);

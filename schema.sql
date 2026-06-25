@@ -10,6 +10,9 @@ CREATE TABLE IF NOT EXISTS hourly_zone_totals (
     hour_start          DATETIME        NOT NULL,
     requests_est        BIGINT UNSIGNED NOT NULL DEFAULT 0,
     bytes_est           BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    -- Cloudflare "visits" (sessions): arrivals from a different referer host.
+    -- Summable per hour, unlike unique visitors (which are queried live).
+    visits_est          BIGINT UNSIGNED NOT NULL DEFAULT 0,
     -- cacheStatus in (hit, stale, revalidated, updating)
     cached_requests_est BIGINT UNSIGNED NOT NULL DEFAULT 0,
     errors_4xx_est      BIGINT UNSIGNED NOT NULL DEFAULT 0,

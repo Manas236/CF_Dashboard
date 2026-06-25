@@ -26,12 +26,13 @@ from app import bots, cloudflare, config, db
 
 TOTALS_SQL = """
 INSERT INTO hourly_zone_totals
-  (site, hour_start, requests_est, bytes_est, cached_requests_est,
+  (site, hour_start, requests_est, bytes_est, visits_est, cached_requests_est,
    errors_4xx_est, errors_5xx_est, raw_sample_count, avg_sample_interval)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) AS new
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) AS new
 ON DUPLICATE KEY UPDATE
   requests_est = new.requests_est,
   bytes_est = new.bytes_est,
+  visits_est = new.visits_est,
   cached_requests_est = new.cached_requests_est,
   errors_4xx_est = new.errors_4xx_est,
   errors_5xx_est = new.errors_5xx_est,
@@ -130,7 +131,7 @@ def store_cheap_hour(conn, site, hour_start, totals):
 
     with conn.cursor() as cur:
         cur.execute(TOTALS_SQL, (
-            site, hour_start, totals["requests"], totals["bytes"], cached,
+            site, hour_start, totals["requests"], totals["bytes"], totals["visits"], cached,
             errors_4xx, errors_5xx, totals["raw_count"], totals["sample_interval"],
         ))
         _delete_hour(cur, CHEAP_DIM_TABLES, site, hour_start)

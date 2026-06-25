@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Report — {{ sites[site].label }}{% endblock %}
+
+{% block content %}
+  <!-- printed-only document header (hidden on screen) -->
+  <div class="report-print-header">
+    <div class="rph-title">{{ sites[site].label }} — Board Report</div>
+    <div class="rph-sub">Last 7 days · generated <span id="print-generated"></span></div>
+  </div>
+
+  <section class="report-head">
+    <div class="report-head-main">
+      <h1 class="report-title">Board report <span class="kpi-window" id="report-window">7d</span></h1>
+      <p class="muted" id="report-subtitle">
+        Executive summary for {{ sites[site].label }} — every figure is a
+        sampling-corrected estimate from Cloudflare, eyeball traffic only.
+      </p>
+    </div>
+    <button type="button" class="pdf-btn" id="download-pdf">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      Download PDF
+    </button>
+  </section>
+
+  <section class="stat-strip" id="summary-strip" aria-label="Executive summary">
+    <div class="stat" id="stat-requests">
+      <div class="stat-label">Requests</div>
+      <div class="stat-value">—</div>
+      <div class="stat-sub">total HTTP requests</div>
+    </div>
+    <div class="stat" id="stat-visits">
+      <div class="stat-label">Visits</div>
+      <div class="stat-value">—</div>
+      <div class="stat-sub">reading sessions</div>
+    </div>
+    <div class="stat" id="stat-uniques">
+      <div class="stat-label">Unique viewers</div>
+      <div class="stat-value">—</div>
+      <div class="stat-sub">deduped across the window</div>
+    </div>
+    <div class="stat" id="stat-bytes">
+      <div class="stat-label">Bandwidth</div>
+      <div class="stat-value">—</div>
+      <div class="stat-sub">edge response bytes</div>
+    </div>
+    <div class="stat" id="stat-errors">
+      <div class="stat-label">Error rate</div>
+      <div class="stat-value">—</div>
+      <div class="stat-sub">4xx + 5xx of all requests</div>
+    </div>
+    <div class="stat" id="stat-cache">
+      <div class="stat-label">Cache hit ratio</div>
+      <div class="stat-value">—</div>
+      <div class="stat-sub">served from edge cache</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2>Story of the week</h2>
+        <span class="muted panel-note">the single biggest day-over-day jump in an article's reads</span>
+      </div>
+      <div class="chart-wrap" style="min-height:96px">
+        <div id="story-card"></div>
+        <div class="overlay skeleton" id="story-overlay"></div>
+      </div>
+      <div class="panel-foot muted">
+        “Gained the quickest” = the article whose reads climbed most in one
+        calendar day versus the day before · only top-N paths per hour are
+        stored, so a brief unseen spike can be missed.
+      </div>
+    </div>
+
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2>Day by day</h2>
+        <span class="muted panel-note">each day's headline numbers, top article and fastest riser</span>
+      </div>
+      <div class="chart-wrap" style="min-height:120px">
+        <div class="table-wrap">
+          <table class="data-table" id="daily-table">
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th class="num">Visits</th>
+                <th class="num">Unique viewers</th>
+                <th class="num">Requests</th>
+                <th class="num">Error rate</th>
+                <th>Top article</th>
+                <th>Fastest riser</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="overlay skeleton" id="daily-overlay"></div>
+      </div>
+      <div class="panel-foot muted">
+        Days are whole UTC calendar days · today's row is partial and marked ·
+        unique viewers are a live per-day count (not additive — a returning
+        reader counts once per day).
+      </div>
+    </div>
+
+    <div class="panel span-12">
+      <div class="panel-head">
+        <h2>Visits per day</h2>
+        <span class="muted panel-note">the week's shape at a glance</span>
+      </div>
+      <div class="chart-wrap">
+        <div id="visits-chart" class="chart short"></div>
+        <div class="overlay skeleton" id="visits-overlay"></div>
+      </div>
+    </div>
+
+    <div class="panel span-6">
+      <div class="panel-head">
+        <h2>Who's reading</h2>
+        <span class="muted panel-note">human vs. crawler traffic</span>
+      </div>
+      <div class="chart-wrap" style="min-height:120px">
+        <div id="audience-card"></div>
+        <div class="overlay skeleton" id="audience-overlay"></div>
+      </div>
+      <div class="panel-foot muted">
+        “Human (est.)” = requests minus traffic from identified bots; AI
+        crawlers (GPTBot, ClaudeBot, etc.) are split out from search engines.
+      </div>
+    </div>
+
+    <div class="panel span-6">
+      <div class="panel-head">
+        <h2>Top sections</h2>
+        <span class="muted panel-note">share of article reads</span>
+      </div>
+      <div class="chart-wrap" style="min-height:120px">
+        <div id="categories-card"></div>
+        <div class="overlay skeleton" id="categories-overlay"></div>
+      </div>
+      <div class="panel-foot muted">
+        Sections are derived from the leading path segment
+        (<code>app/config.py · CATEGORY_RULES</code>).
+      </div>
+    </div>
+  </section>
+
+  <section class="report-section-head" id="traction-head" hidden>
+    <div class="rsh-main">
+      <h2>Story timelines</h2>
+      <p class="muted">
+        How each day's top articles gained traction, hour by hour. Each cell is one
+        hour — darker means more reads — and the ringed cell is the story's peak.
+        Times shown in your local timezone.
+      </p>
+    </div>
+    <div class="heat-legend">
+      <span>fewer reads</span>
+      <span class="heat-legend-bar"></span>
+      <span>more</span>
+    </div>
+  </section>
+  <section class="grid" id="traction-section" aria-label="Story timelines"></section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/report.js') }}"></script>
+{% endblock %}

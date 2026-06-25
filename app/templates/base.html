@@ -21,7 +21,7 @@
 </head>
 <body>
   <div class="layout">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="brand">
         <span class="brand-mark"></span>
         <div>
@@ -44,14 +44,26 @@
            href="{{ url_for('main.audience', **q) }}">Bots &amp; AI</a>
         <a class="nav-item {{ 'active' if request.endpoint == 'main.geo' }}"
            href="{{ url_for('main.geo', **q) }}">World</a>
+        <a class="nav-item {{ 'active' if request.endpoint == 'main.report' }}"
+           href="{{ url_for('main.report', **q) }}">Report</a>
       </nav>
       <div class="sidebar-foot">
         All numbers are <strong>estimates</strong> from Cloudflare's adaptively
         sampled data (count × sampleInterval), eyeball traffic only.
       </div>
     </aside>
+    <div class="nav-backdrop" id="nav-backdrop" hidden></div>
     <div class="main">
       <header class="topbar">
+        <button class="nav-toggle" id="nav-toggle" type="button"
+                aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
         <div class="controls">
           <label class="site-select-wrap">
             <select id="site-select" aria-label="Site">
@@ -60,12 +72,14 @@
               {% endfor %}
             </select>
           </label>
+          {% if request.endpoint != 'main.report' %}
           <nav class="range-pills" aria-label="Time range">
             {% for r in ranges %}
               <a class="pill {% if r == range_key %}active{% endif %}"
                  href="{{ url_for(request.endpoint, site=site, range=r) }}">{{ r }}</a>
             {% endfor %}
           </nav>
+          {% endif %}
         </div>
         <div class="topbar-meta">
           <span class="badge" id="source-badge" hidden></span>

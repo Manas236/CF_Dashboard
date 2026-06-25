@@ -16,6 +16,30 @@ def is_article_path(path):
     return True
 
 
+# An article slug is a headline "sentence"; a section/category is one or two
+# words; "/" is the home page. Below this many slug words a path is treated as
+# a section, not an article.
+ARTICLE_MIN_SLUG_WORDS = 3
+
+
+def is_article(path):
+    """True only for an actual article (a headline), not the home page or a
+    section/category landing page.
+
+    Rule (from the site's URL shape): "/" is Home; a final path segment of one
+    or two words (e.g. "cricket", "health-wellness") is a section; a multi-word
+    slug (a headline, e.g. "morbe-at-26-water-cuts-continue") is an article.
+    """
+    if not is_article_path(path):
+        return False
+    p = (path or "").split("?", 1)[0].split("#", 1)[0].rstrip("/")
+    if not p:                      # "/" -> Home
+        return False
+    slug = p.rsplit("/", 1)[-1]
+    words = [w for w in re.split(r"[-_]+", slug) if w]
+    return len(words) >= ARTICLE_MIN_SLUG_WORDS
+
+
 def categorize(path):
     """Category label for a path: first matching configured prefix wins,
     otherwise the prettified first path segment."""

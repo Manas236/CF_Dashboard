@@ -14,6 +14,14 @@
       D.countUp(document.getElementById("kpi-bytes"), d.bytes, { fmt: function (v) { return "~" + D.fmtBytes(v); } });
       D.countUp(document.getElementById("kpi-errors"), d.error_rate, { fmt: function (v) { return D.fmtPct(v); } });
       D.countUp(document.getElementById("kpi-cache"), d.cache_hit_ratio, { fmt: function (v) { return D.fmtPct(v); } });
+      D.countUp(document.getElementById("kpi-visits"), d.visits, { fmt: function (v) { return "~" + D.fmtNum(v); } });
+      if (d.uniques == null) {
+        D.setText("kpi-uniques", "n/a");
+        D.setText("kpi-uniques-sub", "unavailable");
+      } else {
+        D.countUp(document.getElementById("kpi-uniques"), d.uniques, { fmt: function (v) { return "~" + D.fmtNum(v); } });
+        D.setText("kpi-uniques-sub", "incl. bots & crawlers");
+      }
       D.setText("kpi-errors-sub", "4xx ~" + D.fmtNum(d.errors_4xx) + " · 5xx ~" + D.fmtNum(d.errors_5xx));
       if (d.source === "mysql" && d.hours_covered < d.hours_expected) {
         D.setText("kpi-requests-sub", "estimated · " + d.hours_covered + "/" + d.hours_expected + " hours collected");
@@ -29,7 +37,7 @@
   function renderChart() {
     if (!seriesData) return;
     var t = D.tokens();
-    var points = seriesData.map(function (p) { return { value: [p.ts, p.requests], bytes: p.bytes }; });
+    var points = seriesData.map(function (p) { return { value: [p.ts, p.requests], bytes: p.bytes, visits: p.visits }; });
     chart.setOption({
       backgroundColor: "transparent",
       grid: { left: 56, right: 18, top: 24, bottom: 36 },
@@ -42,10 +50,19 @@
           var p = params[0];
           if (!p) return "";
           var when = new Date(p.value[0]).toLocaleString();
-          var reqs = p.value[1] === null ? "not collected" : "~" + D.fmtNum(p.value[1]) + " requests (est.)";
-          var bw = p.data.bytes == null ? "" : "<br>~" + D.fmtBytes(p.data.bytes) + " bandwidth (est.)";
+          var head, sub = "";
+          if (p.value[1] === null) {
+            head = "not collected";
+          } else if (p.data.visits == null) {
+            head = "~" + D.fmtNum(p.value[1]) + " requests (est.)";
+          } else {
+            // visits ("actual people") lead; requests stay as a small secondary line
+            head = "~" + D.fmtNum(p.data.visits) + " est. visits";
+            sub = "<div style='font-size:11px;color:" + t.dim + "'>~" + D.fmtNum(p.value[1]) + " requests (est.)</div>";
+          }
+          var bw = p.data.bytes == null ? "" : "<div style='font-size:11px;color:" + t.dim + "'>~" + D.fmtBytes(p.data.bytes) + " bandwidth (est.)</div>";
           return "<div style='font-size:11px;color:" + t.dim + "'>" + when + "</div>" +
-            "<strong>" + reqs + "</strong>" + bw;
+            "<strong style='font-size:14px'>" + head + "</strong>" + sub + bw;
         }
       }),
       xAxis: { type: "time", axisLine: D.axisLine(), axisLabel: D.axisLabel(),

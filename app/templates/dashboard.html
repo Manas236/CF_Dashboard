@@ -9,6 +9,16 @@
       <div class="kpi-sub" id="kpi-requests-sub">estimated, eyeball only</div>
     </div>
     <div class="kpi">
+      <div class="kpi-label">Visits <span class="kpi-window">{{ range_key }}</span></div>
+      <div class="kpi-value" id="kpi-visits">—</div>
+      <div class="kpi-sub">sessions, not raw requests</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Unique Viewers <span class="kpi-window">{{ range_key }}</span></div>
+      <div class="kpi-value" id="kpi-uniques">—</div>
+      <div class="kpi-sub" id="kpi-uniques-sub">incl. bots &amp; crawlers</div>
+    </div>
+    <div class="kpi">
       <div class="kpi-label">Bandwidth <span class="kpi-window">{{ range_key }}</span></div>
       <div class="kpi-value" id="kpi-bytes">—</div>
       <div class="kpi-sub">edge response bytes</div>

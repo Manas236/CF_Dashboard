@@ -13,17 +13,18 @@
         <div class="overlay skeleton" id="momentum-overlay"></div>
       </div>
       <div class="panel-foot muted">
-        x = est. hits this window (log scale) · y = growth vs the previous equal window
-        (capped at +500% for display) · bubble = absolute change ·
-        paths under <span id="min-hits"></span> current hits are hidden ·
-        “NEW” = no hits at all in the prior window
+        x = <span id="momentum-x-label">est. visits</span> this window (log scale) ·
+        y = growth vs the previous equal window (capped at +500% for display) ·
+        bubble = absolute change · paths under <span id="min-hits"></span> current hits are hidden ·
+        “NEW” = no hits at all in the prior window ·
+        visits are estimated (zone visits ÷ requests); hits are raw HTTP requests
       </div>
     </div>
 
     <div class="panel span-12">
       <div class="panel-head">
-        <h2>Top articles <span class="kpi-window">{{ range_key }}</span></h2>
-        <span class="muted panel-note">sparklines show the last 24 h regardless of range</span>
+        <h2>Trending articles <span class="kpi-window">{{ range_key }}</span></h2>
+        <span class="muted panel-note">ranked by momentum (surge × volume) · sparklines show the last 24 h regardless of range</span>
       </div>
       <div class="chart-wrap" style="min-height:120px">
         <div class="leaderboard" id="leaderboard"></div>

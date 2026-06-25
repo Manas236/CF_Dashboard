@@ -28,6 +28,14 @@
     return nodes;
   }
 
+  // est. human visits ("actual people"): human requests scaled by the zone
+  // visits-per-request factor. Bots/crawlers stay in requests — they have no
+  // meaningful "visit" count, so converting them would mislead.
+  function humanVisits() {
+    var v = D.estViews(data.totals.human);
+    return v === null ? "" : " · ~" + D.fmtNum(v) + " est. visits";
+  }
+
   function renderStats() {
     var tt = data.totals;
     if (mode === "all") {
@@ -36,11 +44,11 @@
       D.setText("stat-a-sub", "eyeball traffic, est.");
       D.setText("stat-b-label", "Est. humans");
       D.countUp(document.getElementById("stat-b"), tt.human, { fmt: function (v) { return "~" + D.fmtNum(v); } });
-      D.setText("stat-b-sub", D.fmtPct(tt.requests ? tt.human / tt.requests : null) + " of total");
+      D.setText("stat-b-sub", D.fmtPct(tt.requests ? tt.human / tt.requests : null) + " of total" + humanVisits());
     } else {
       D.setText("stat-a-label", "Est. humans");
       D.countUp(document.getElementById("stat-a"), tt.human, { fmt: function (v) { return "~" + D.fmtNum(v); } });
-      D.setText("stat-a-sub", "raw minus UA-identified bots");
+      D.setText("stat-a-sub", "raw minus UA-identified bots" + humanVisits());
       D.setText("stat-b-label", "Removed as bots");
       D.countUp(document.getElementById("stat-b"), tt.bot, { fmt: function (v) { return "~" + D.fmtNum(v); } });
       D.setText("stat-b-sub", D.fmtPct(tt.requests ? tt.bot / tt.requests : null) + " of total");
@@ -140,6 +148,7 @@
     }
     data = d;
     D.setBadge(d.source);
+    D.setViewsFactor(d.views_factor);
     D.setText("audience-note", d.current_hours + " h of stored data in window");
     renderStats();
     if (!d.totals.requests) {

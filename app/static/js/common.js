@@ -98,6 +98,26 @@ window.Dash = (function () {
     });
   }
 
+  /* ---- mobile nav drawer ------------------------------------------ */
+  var sidebar = document.getElementById("sidebar");
+  var navToggle = document.getElementById("nav-toggle");
+  var navBackdrop = document.getElementById("nav-backdrop");
+  function setNav(open) {
+    if (!sidebar) return;
+    sidebar.classList.toggle("open", open);
+    if (navBackdrop) navBackdrop.hidden = !open;
+    if (navToggle) navToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  if (navToggle) {
+    navToggle.addEventListener("click", function () {
+      setNav(!sidebar.classList.contains("open"));
+    });
+  }
+  if (navBackdrop) navBackdrop.addEventListener("click", function () { setNav(false); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && sidebar && sidebar.classList.contains("open")) setNav(false);
+  });
+
   /* ---- formatting -------------------------------------------------- */
   function fmtNum(n) {
     if (n === null || n === undefined) return "—";
@@ -121,6 +141,29 @@ window.Dash = (function () {
     if (g === null || g === undefined) return "NEW";
     var v = Math.round(g);
     return (v > 0 ? "+" : "") + v + "%";
+  }
+
+  /* ---- estimated visits ("actual people") -------------------------------
+     Per-path Cloudflare data only has request counts; "visits" (reading
+     sessions) exist only zone-wide. Each panel hands us a zone visits-per-
+     request factor; we scale a path's hits by it to estimate real visits.
+     Requests over-count people (assets, reloads, bots), so visits lead and
+     hits stay as a small secondary figure. */
+  var viewsFactor = null;
+  function setViewsFactor(f) { viewsFactor = (typeof f === "number" && f > 0) ? f : null; }
+  function hasViews() { return viewsFactor !== null; }
+  function estViews(hits) {
+    if (hits === null || hits === undefined || viewsFactor === null) return null;
+    return Math.round(hits * viewsFactor);
+  }
+  /* tooltip block: big "~N est. visits" headline + small "~N est. hits". When
+     no factor is available it gracefully falls back to hits as the headline. */
+  function viewsTip(hits, unit) {
+    var t = tokens();
+    var v = estViews(hits);
+    if (v === null) return "<div><b>~" + fmtNum(hits) + "</b> est. hits</div>";
+    return "<div style='font-size:14px'><b>~" + fmtNum(v) + "</b> est. " + (unit || "visits") + "</div>" +
+      "<div style='font-size:11px;color:" + t.dim + "'>~" + fmtNum(hits) + " est. hits</div>";
   }
 
   /* count-up tween for KPI numbers */
@@ -192,11 +235,12 @@ window.Dash = (function () {
 
   return {
     site: SITE, range: RANGE,
-    tokens: tokens, current: current, momentumColor: momentumColor,
+    tokens: tokens, current: current, setTheme: setTheme, momentumColor: momentumColor,
     prefersReduced: prefersReduced,
     tooltipBase: tooltipBase, axisLabel: axisLabel, axisLine: axisLine, splitLine: splitLine,
     makeChart: makeChart, onTheme: onTheme,
     fmtNum: fmtNum, fmtBytes: fmtBytes, fmtPct: fmtPct, fmtGrowth: fmtGrowth, countUp: countUp,
+    setViewsFactor: setViewsFactor, hasViews: hasViews, estViews: estViews, viewsTip: viewsTip,
     sourceLabel: sourceLabel, noticeText: noticeText,
     setBadge: setBadge, setUpdated: setUpdated, setText: setText,
     loading: loading, message: message, ready: ready,

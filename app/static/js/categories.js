@@ -20,7 +20,8 @@
           var head = p.data.path
             ? "<strong>" + p.name + "</strong><br><span style='font-family:JetBrains Mono,monospace;font-size:11px;color:" + t.dim + "'>" + p.data.path + "</span>"
             : "<strong>" + p.name + "</strong>";
-          return head + "<br>~" + D.fmtNum(p.value) + " est. requests · " + share + "% of content";
+          return head + "<div style='margin-top:4px'>" + D.viewsTip(p.value) + "</div>" +
+            "<div style='font-size:11px;color:" + t.dim + "'>" + share + "% of content</div>";
         }
       }),
       series: [{
@@ -92,6 +93,7 @@
       return;
     }
     D.setBadge(d.source);
+    D.setViewsFactor(d.views_factor);
     if (d.notice === "no_articles" || !d.treemap.length) {
       D.message(tmOverlay, "No article traffic stored for this window.");
       D.message(rdOverlay, "No article traffic stored for this window.");
@@ -100,8 +102,12 @@
     data = d;
     renderTreemap();
     D.ready(tmOverlay);
-    D.setText("treemap-note", d.treemap.length + " categories · ~" + D.fmtNum(d.total) +
-      " est. content requests · click a tile to drill in");
+    var totalViews = D.estViews(d.total);
+    var totalLabel = totalViews === null
+      ? "~" + D.fmtNum(d.total) + " est. content requests"
+      : "~" + D.fmtNum(totalViews) + " est. content visits";
+    D.setText("treemap-note", d.treemap.length + " categories · " + totalLabel +
+      " · click a tile to drill in");
 
     if (d.radar && d.radar.series.length >= 2) {
       renderRadar();

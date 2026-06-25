@@ -58,6 +58,48 @@ def _trend_class(growth, is_new):
     return "steady"
 
 
+# The scatter caps growth display at +500%; the momentum score caps the same
+# way so one freak ratio can't dominate the trending leaderboard.
+TREND_DISPLAY_CAP = 500.0
+
+
+def visits_factor(site, start, end):
+    """Zone-wide visits-per-request ratio over the window.
+
+    Per-path "visits" (Cloudflare reading sessions — arrivals from an external
+    referer) aren't stored; only request counts are. So a path's estimated
+    visits is its requests scaled by this zone-wide ratio. Returns a float in
+    (0, 1], or None when it can't be computed (no requests, or no stored
+    visits), in which case the UI falls back to showing raw hits.
+    """
+    row = db.fetch_one(
+        "SELECT SUM(requests_est) r, SUM(visits_est) v FROM hourly_zone_totals "
+        "WHERE site = %s AND hour_start >= %s AND hour_start < %s",
+        (site, start, end),
+    )
+    if not row:
+        return None
+    req, vis = int(row["r"] or 0), int(row["v"] or 0)
+    if req <= 0 or vis <= 0:
+        return None
+    return min(vis / req, 1.0)
+
+
+def _momentum(item):
+    """Trending score: the absolute gain in hits amplified by the growth rate,
+    so a big surging story outranks both a flat giant and a tiny page with a
+    freak percentage. A uniform views factor scales every score equally, so
+    ranking on hits is the same as ranking on estimated visits."""
+    change = max(item["change"], 0)
+    if item["cls"] == "new":
+        rate = TREND_DISPLAY_CAP / 100.0          # brand-new = treated as a full surge
+    elif item["growth"] is None:
+        return float(change)                      # no prior coverage -> rank on volume
+    else:
+        rate = min(max(item["growth"], 0.0), TREND_DISPLAY_CAP) / 100.0
+    return change * (1.0 + rate)
+
+
 # --------------------------------------------------------------------------
 # Panel A — Trending & Top Articles
 # --------------------------------------------------------------------------
@@ -100,10 +142,20 @@ def articles_panel(site, range_key):
             "change": cur - prior,
             "cls": _trend_class(growth if growth is not None else 0, is_new),
         })
+    for it in items:
+        it["momentum"] = round(_momentum(it), 1)
+
+    factor = visits_factor(site, start, end)
 
     items.sort(key=lambda x: x["cur"], reverse=True)
     scatter = [i for i in items if i["cur"] >= config.TREND_MIN_HITS][:150]
-    leaderboard = items[:15]
+
+    # Leaderboard = most-trending (momentum), not most-read. A volume floor keeps
+    # a freak-growth micro-article from crowding out the real stories.
+    leaderboard = sorted(
+        (i for i in items if i["cur"] >= config.TREND_MIN_HITS),
+        key=lambda x: x["momentum"], reverse=True,
+    )[:15]
 
     # Sparklines: fixed last-24h hourly trajectory for the leaderboard paths.
     spark_start = _utcnow().replace(minute=0, second=0, microsecond=0) - timedelta(hours=23)
@@ -132,6 +184,7 @@ def articles_panel(site, range_key):
         "prior_hours": prior_cov,
         "window_start": _iso_z(start),
         "prior_start": _iso_z(prior_start),
+        "views_factor": factor,
         "scatter": scatter,
         "leaderboard": leaderboard,
     }
@@ -263,6 +316,7 @@ def categories_panel(site, range_key):
         "total": total,
         "current_hours": cur_cov,
         "prior_hours": prior_cov,
+        "views_factor": visits_factor(site, start, end),
         "treemap": treemap,
         "radar": radar,
     }
@@ -534,6 +588,7 @@ def audience_panel(site, range_key):
             "ai": ai_total,
             "other_bots": bot_total - search_total - ai_total,
         },
+        "views_factor": visits_factor(site, start, end),
         "sunburst": sunburst,
         "timeline": {"cols": cols, "ai_series": ai_series, "human": human_data},
     }
@@ -571,7 +626,264 @@ def geo_panel(site, range_key):
         "home_country": HOME_COUNTRY,
         "total": total,
         "home": home,
+        "views_factor": visits_factor(site, start, end),
         "countries": countries,
+    }
+
+
+# --------------------------------------------------------------------------
+# Panel F — Board Report (executive summary + day-by-day breakdown)
+# --------------------------------------------------------------------------
+
+# How many top stories get an hour-by-hour traction timeline per day.
+TRACTION_PER_DAY = 6
+
+
+def report_window(range_key):
+    """Whole UTC calendar days for the report: (start, end, days, prior_start).
+
+    Unlike the hour-aligned `window()`, the report buckets by calendar day so
+    each row is a clean "what happened on the 21st" and the day-bucketed
+    Cloudflare uniques line up. `days` = N whole days ending with today."""
+    days = max(1, RANGE_HOURS[range_key] // 24)
+    today = _utcnow().date()
+    end = datetime.combine(today + timedelta(days=1), datetime.min.time())
+    start = end - timedelta(days=days)
+    return start, end, days, start - timedelta(days=days)
+
+
+def _delta_pct(cur, prior):
+    """Percent change cur vs prior, or None when there's no prior to compare."""
+    if not prior:
+        return None
+    return (cur - prior) / prior * 100.0
+
+
+def report_panel(site, range_key):
+    """Board-meeting view: an executive summary with week-over-week deltas, a
+    day-by-day table (each day's top story + fastest riser), the standout
+    "story of the week", and audience/category context. MySQL-only; per-day and
+    deduped unique-visitor figures are attached live by the route."""
+    start, end, days, prior_start = report_window(range_key)
+
+    cur_cov = hours_covered(site, start, end)
+    if cur_cov == 0:
+        return _no_history()
+    prior_cov = hours_covered(site, prior_start, start)
+
+    current_days = [(start + timedelta(days=i)).date() for i in range(days)]
+    prior_days = [(prior_start + timedelta(days=i)).date() for i in range(days)]
+
+    # Zone daily aggregates for the current AND prior window in one query.
+    zrows = db.fetch_all(
+        """
+        SELECT DATE(hour_start) d, COUNT(*) hrs,
+               SUM(requests_est) requests, SUM(visits_est) visits,
+               SUM(bytes_est) bytes, SUM(bot_requests_est) bot,
+               SUM(cached_requests_est) cached,
+               SUM(errors_4xx_est) + SUM(errors_5xx_est) errors
+        FROM hourly_zone_totals
+        WHERE site = %s AND hour_start >= %s AND hour_start < %s
+        GROUP BY DATE(hour_start)
+        """,
+        (site, prior_start, end),
+    )
+    by_day = {r["d"]: r for r in zrows}
+
+    def _sum(day_list, key):
+        return sum(int(by_day[d][key] or 0) for d in day_list if d in by_day)
+
+    cur_req, prior_req = _sum(current_days, "requests"), _sum(prior_days, "requests")
+    cur_vis, prior_vis = _sum(current_days, "visits"), _sum(prior_days, "visits")
+    cur_byt, prior_byt = _sum(current_days, "bytes"), _sum(prior_days, "bytes")
+    cur_err, prior_err = _sum(current_days, "errors"), _sum(prior_days, "errors")
+    cur_cache = _sum(current_days, "cached")
+    cur_bot = _sum(current_days, "bot")
+
+    cur_err_rate = cur_err / cur_req if cur_req else 0.0
+    prior_err_rate = prior_err / prior_req if prior_req else 0.0
+    cur_cache_ratio = cur_cache / cur_req if cur_req else 0.0
+
+    summary = {
+        "requests": {"value": cur_req, "delta": _delta_pct(cur_req, prior_req) if prior_cov else None},
+        "visits": {"value": cur_vis, "delta": _delta_pct(cur_vis, prior_vis) if prior_cov else None},
+        "bytes": {"value": cur_byt, "delta": _delta_pct(cur_byt, prior_byt) if prior_cov else None},
+        # uniques are filled in live by the route (not summable from rollups)
+        "uniques": {"value": None, "delta": None},
+        "error_rate": {"value": round(cur_err_rate, 5),
+                       "delta_pp": round((cur_err_rate - prior_err_rate) * 100, 3) if prior_cov else None},
+        "cache_hit_ratio": {"value": round(cur_cache_ratio, 5), "delta_pp": None},
+    }
+
+    # Per-path, per-day hits (current + one prior window so day 1 has a baseline
+    # for "fastest riser"). Article paths only.
+    prows = db.fetch_all(
+        """
+        SELECT DATE(hour_start) d, path, SUM(requests_est) hits
+        FROM hourly_path_stats
+        WHERE site = %s AND hour_start >= %s AND hour_start < %s
+        GROUP BY DATE(hour_start), path
+        """,
+        (site, prior_start, end),
+    )
+    by_path_day = {}
+    for r in prows:
+        if not categories.is_article_path(r["path"]):
+            continue
+        by_path_day.setdefault(r["d"], {})[r["path"]] = int(r["hits"] or 0)
+
+    def _surge(path, frm, to, day):
+        return {"path": path, "title": categories.article_title(path),
+                "gain": to - frm, "from": frm, "to": to, "date": day.strftime("%Y-%m-%d")}
+
+    daily = []
+    best_story = None   # biggest single-day surge of the week
+    cat_totals = {}
+    for day in current_days:
+        z = by_day.get(day)
+        req = int(z["requests"] or 0) if z else 0
+        errors = int(z["errors"] or 0) if z else 0
+        paths = by_path_day.get(day, {})
+        prev = by_path_day.get(day - timedelta(days=1), {})
+        # Top story / fastest riser must be real articles (headlines), not the
+        # home page or a section landing; categories below stay broad.
+        apaths = {p: h for p, h in paths.items() if categories.is_article(p)}
+
+        top = None
+        if apaths:
+            tp = max(apaths, key=apaths.get)
+            top = {"path": tp, "title": categories.article_title(tp), "hits": apaths[tp]}
+
+        riser, best_gain = None, 0
+        for path, hits in apaths.items():
+            gain = hits - prev.get(path, 0)
+            if gain > best_gain:
+                best_gain, riser = gain, _surge(path, prev.get(path, 0), hits, day)
+        if riser is not None and (best_story is None or riser["gain"] > best_story["gain"]):
+            best_story = riser
+
+        for path, hits in paths.items():
+            cat = categories.categorize(path)
+            cat_totals[cat] = cat_totals.get(cat, 0) + hits
+
+        daily.append({
+            "date": day.strftime("%Y-%m-%d"),
+            "hours_covered": int(z["hrs"]) if z else 0,
+            "requests": req,
+            "visits": int(z["visits"] or 0) if z else 0,
+            "bytes": int(z["bytes"] or 0) if z else 0,
+            "error_rate": round(errors / req, 5) if req else 0.0,
+            "uniques": None,   # filled live by the route
+            "top": top,
+            "riser": ({"path": riser["path"], "title": riser["title"],
+                       "gain": riser["gain"]} if riser else None),
+        })
+
+    # Audience split over the current window (human / search / AI / other bots).
+    by_name = db.fetch_all(
+        """
+        SELECT bot_name, SUM(requests_est) r
+        FROM hourly_bot_stats
+        WHERE site = %s AND hour_start >= %s AND hour_start < %s
+        GROUP BY bot_name
+        """,
+        (site, start, end),
+    )
+    search = sum(int(b["r"] or 0) for b in by_name if bots.bot_type(b["bot_name"]) == "search")
+    ai = sum(int(b["r"] or 0) for b in by_name if bots.bot_type(b["bot_name"]) == "ai")
+    bot_total = min(cur_bot, cur_req)
+    audience = {
+        "total": cur_req,
+        "human": max(cur_req - bot_total, 0),
+        "search": min(search, bot_total),
+        "ai": min(ai, bot_total),
+        "other_bots": max(bot_total - min(search, bot_total) - min(ai, bot_total), 0),
+    }
+
+    cat_total = sum(cat_totals.values()) or 1
+    top_categories = [
+        {"name": name, "value": val, "share": round(val / cat_total * 100, 1)}
+        for name, val in sorted(cat_totals.items(), key=lambda kv: kv[1], reverse=True)[:8]
+    ]
+
+    # Story timelines: for each day, its top articles with their hour-by-hour
+    # trajectory, peak time and first surge — "how each story gained traction
+    # and when". One hourly query covers every selected path across the window.
+    selected = {}
+    union = set()
+    for day in current_days:
+        paths = {p: h for p, h in by_path_day.get(day, {}).items() if categories.is_article(p)}
+        topk = sorted(paths, key=paths.get, reverse=True)[:TRACTION_PER_DAY]
+        if topk:
+            selected[day] = topk
+            union.update(topk)
+
+    hourly_by_path = {}
+    if union:
+        placeholders = ", ".join(["%s"] * len(union))
+        hrows = db.fetch_all(
+            f"""
+            SELECT hour_start, path, requests_est
+            FROM hourly_path_stats
+            WHERE site = %s AND hour_start >= %s AND hour_start < %s
+              AND path IN ({placeholders})
+            """,
+            [site, start, end] + list(union),
+        )
+        for r in hrows:
+            hourly_by_path.setdefault(r["path"], {})[r["hour_start"]] = int(r["requests_est"] or 0)
+
+    now_hour = _utcnow().replace(minute=0, second=0, microsecond=0)
+    traction = []
+    for day in current_days:
+        paths = selected.get(day)
+        if not paths:
+            continue
+        day_start = datetime.combine(day, datetime.min.time())
+        day_last = min(day_start + timedelta(hours=24), now_hour + timedelta(hours=1))
+        hour_grid = []
+        h = day_start
+        while h < day_last:
+            hour_grid.append(h)
+            h += timedelta(hours=1)
+
+        articles = []
+        for path in paths:
+            series = hourly_by_path.get(path, {})
+            hourly = [{"ts": _iso_z(hr), "hits": series.get(hr, 0)} for hr in hour_grid]
+            total = sum(p["hits"] for p in hourly)
+            if total <= 0:
+                continue
+            peak = max(hourly, key=lambda p: p["hits"])
+            threshold = max(peak["hits"] * 0.25, 1)   # "started gaining traction"
+            first = next((p for p in hourly if p["hits"] >= threshold), peak)
+            articles.append({
+                "path": path,
+                "title": categories.article_title(path),
+                "total": total,
+                "hourly": hourly,
+                "peak_ts": peak["ts"],
+                "peak_hits": peak["hits"],
+                "first_ts": first["ts"],
+            })
+        if articles:
+            traction.append({"date": day.strftime("%Y-%m-%d"), "articles": articles})
+
+    return {
+        "source": "mysql",
+        "range": range_key,
+        "days": days,
+        "window_start": _iso_z(start),
+        "window_end": _iso_z(end),
+        "current_hours": cur_cov,
+        "prior_hours": prior_cov,
+        "prior_available": prior_cov > 0,
+        "summary": summary,
+        "daily": daily,
+        "story": best_story,
+        "audience": audience,
+        "categories": top_categories,
+        "traction": traction,
     }
 
 
