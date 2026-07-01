@@ -1,3 +1,4 @@
+import os
 import secrets
 from datetime import timedelta
 
@@ -32,6 +33,21 @@ def create_app():
     # --- Trust one proxy hop's X-Forwarded-* (Nginx in front) so remote_addr
     # and the URL scheme reflect the real client, not 127.0.0.1.
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+    # --- Cache-bust static assets. Cloudflare/Nginx cache css & js hard, so a
+    # deploy that ships new common.js/style.css would otherwise leave returning
+    # users on the stale copies (e.g. the mobile nav button rendering but its
+    # click handler missing). Stamp every static URL with the file's mtime so
+    # the URL changes whenever the file does, forcing a fresh fetch.
+    @app.url_defaults
+    def add_static_version(endpoint, values):
+        if endpoint != "static" or "filename" not in values:
+            return
+        fpath = os.path.join(app.static_folder, values["filename"])
+        try:
+            values["v"] = int(os.stat(fpath).st_mtime)
+        except OSError:
+            pass
 
     from .auth import bp as auth_bp
     from .routes import bp as main_bp

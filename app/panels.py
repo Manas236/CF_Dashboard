@@ -468,6 +468,46 @@ def _subtype(bot_name):
     return SUBTYPE_LABELS.get(bots.bot_type(bot_name), SUBTYPE_OTHER)
 
 
+def _report_sunburst(by_name, human, search, ai, other_bots):
+    """Humans-vs-bots sunburst for the board report, sized to match the report's
+    audience split (which counts bots from Cloudflare's own classification, not
+    just named UAs). Inner ring = human vs bots; middle ring = bot families;
+    outer ring drills Search/AI into the named crawlers behind them. "Other bots"
+    stays a leaf — it's mostly CF-flagged traffic with no UA name to break down."""
+    grouped = {}
+    for b in by_name:
+        grouped.setdefault(_subtype(b["bot_name"]), []).append(
+            {"name": b["bot_name"], "value": int(b["r"] or 0)})
+
+    def children(label):
+        lst = sorted(grouped.get(label, []), key=lambda b: b["value"], reverse=True)
+        top, rest = lst[:6], lst[6:]
+        out = list(top)
+        if rest:
+            out.append({"name": "(others)", "value": sum(b["value"] for b in rest)})
+        return out
+
+    tree = [{"name": "Human (est.)", "value": human, "itemStyle": {"color": "#4f8ff7"}}]
+    bot_children = []
+    for label, color, span, drill in (
+        ("Search engines", "#3fb96f", search, True),
+        ("AI crawlers", "#f6821f", ai, True),
+        (SUBTYPE_OTHER, "#8a93a6", other_bots, False),
+    ):
+        if span <= 0:
+            continue
+        node = {"name": label, "itemStyle": {"color": color}}
+        kids = children(label) if drill else []
+        if kids and sum(k["value"] for k in kids) > 0:
+            node["children"] = kids   # ECharts sizes the ring by its children's sum
+        else:
+            node["value"] = span
+        bot_children.append(node)
+    if bot_children:
+        tree.append({"name": "Bots", "itemStyle": {"color": "#e5a94b"}, "children": bot_children})
+    return tree
+
+
 def audience_panel(site, range_key):
     start, end, n = window(range_key)
     cur_cov = hours_covered(site, start, end)
@@ -792,12 +832,15 @@ def report_panel(site, range_key):
     search = sum(int(b["r"] or 0) for b in by_name if bots.bot_type(b["bot_name"]) == "search")
     ai = sum(int(b["r"] or 0) for b in by_name if bots.bot_type(b["bot_name"]) == "ai")
     bot_total = min(cur_bot, cur_req)
+    human = max(cur_req - bot_total, 0)
+    other_bots = max(bot_total - min(search, bot_total) - min(ai, bot_total), 0)
     audience = {
         "total": cur_req,
-        "human": max(cur_req - bot_total, 0),
+        "human": human,
         "search": min(search, bot_total),
         "ai": min(ai, bot_total),
-        "other_bots": max(bot_total - min(search, bot_total) - min(ai, bot_total), 0),
+        "other_bots": other_bots,
+        "sunburst": _report_sunburst(by_name, human, search, ai, other_bots),
     }
 
     cat_total = sum(cat_totals.values()) or 1

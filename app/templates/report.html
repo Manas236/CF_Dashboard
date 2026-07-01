@@ -125,12 +125,15 @@
         <span class="muted panel-note">human vs. crawler traffic</span>
       </div>
       <div class="chart-wrap" style="min-height:120px">
+        <div id="report-sunburst" class="chart audience-sunburst"></div>
         <div id="audience-card"></div>
         <div class="overlay skeleton" id="audience-overlay"></div>
       </div>
       <div class="panel-foot muted">
-        “Human (est.)” = requests minus traffic from identified bots; AI
-        crawlers (GPTBot, ClaudeBot, etc.) are split out from search engines.
+        Inner ring = human vs. bots · outer rings = bot families and named
+        crawlers (click a segment to zoom). “Human (est.)” = requests minus
+        identified bots; AI crawlers (GPTBot, ClaudeBot, etc.) are split out
+        from search engines.
       </div>
     </div>
 

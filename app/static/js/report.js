@@ -5,6 +5,7 @@
   var D = window.Dash;
 
   var visits = D.makeChart("visits-chart");
+  var sunburst = D.makeChart("report-sunburst");
   var visitsOverlay = document.getElementById("visits-overlay");
   var storyOverlay = document.getElementById("story-overlay");
   var dailyOverlay = document.getElementById("daily-overlay");
@@ -139,7 +140,12 @@
         }
       }),
       xAxis: { type: "category", data: rows.map(function (r) { return dayLabel(r.date); }),
-        axisLine: D.axisLine(), axisLabel: D.axisLabel(), axisTick: { show: false } },
+        axisLine: D.axisLine(),
+        // ECharts auto-hides labels it thinks would overlap; at the narrow print
+        // width that dropped every other day. Force all labels when there are few
+        // enough to fit (7d board view); keep auto-decimation for longer ranges.
+        axisLabel: Object.assign(D.axisLabel(), { interval: rows.length <= 10 ? 0 : "auto" }),
+        axisTick: { show: false } },
       yAxis: { type: "value", axisLabel: Object.assign(D.axisLabel(), { formatter: D.fmtNum }),
         splitLine: D.splitLine() },
       series: [{
@@ -156,7 +162,8 @@
           ])
         },
         emphasis: { itemStyle: { color: t.live } },
-        animationDuration: D.prefersReduced() ? 0 : 700
+        // no animation while printing, so the bars are fully drawn on paper
+        animationDuration: (printing || D.prefersReduced()) ? 0 : 700
       }]
     }, true);
   }
@@ -186,6 +193,37 @@
 
     host.innerHTML = bar + legend;
     D.ready(audienceOverlay);
+  }
+
+  /* The same humans-vs-bots sunburst as the Bots & AI page, sized here to match
+     the split legend below it (colors come straight from the backend nodes, so
+     the rings and the legend stay in sync). Click a segment to zoom. */
+  function renderSunburst() {
+    var a = data && data.audience;
+    if (!a || !a.sunburst || !a.total) return;
+    var t = D.tokens();
+    sunburst.setOption({
+      backgroundColor: "transparent",
+      tooltip: Object.assign(D.tooltipBase(), {
+        formatter: function (p) {
+          var share = a.total ? " · " + D.fmtPct(p.value / a.total) + " of total" : "";
+          return "<strong>" + p.name + "</strong><br>~" + D.fmtNum(p.value) + " est. requests" + share;
+        }
+      }),
+      series: [{
+        type: "sunburst", data: JSON.parse(JSON.stringify(a.sunburst)),
+        radius: ["16%", "92%"], sort: "desc", nodeClick: "rootToNode",
+        emphasis: { focus: "ancestor" },
+        itemStyle: { borderColor: t.surface, borderWidth: 2 },
+        label: { color: "#fff", fontSize: 11, fontFamily: "Inter", minAngle: 8,
+          formatter: function (p) { return p.name.length > 16 ? p.name.slice(0, 15) + "…" : p.name; } },
+        levels: [ {},
+          { r0: "16%", r: "50%", label: { rotate: 0, fontSize: 12 } },
+          { r0: "50%", r: "72%" },
+          { r0: "72%", r: "92%", label: { rotate: "tangential", fontSize: 10 } } ],
+        animationDuration: (printing || D.prefersReduced()) ? 0 : 800
+      }]
+    }, true);
   }
 
   /* ---- top sections ---------------------------------------------------- */
@@ -353,7 +391,7 @@
     });
   }
 
-  D.onTheme(renderVisits);
+  D.onTheme(function () { renderVisits(); renderSunburst(); });
 
   /* ---- print / PDF ----------------------------------------------------
      The on-screen view is dark and interactive; for a printout we flip to the
@@ -368,12 +406,23 @@
     printing = true;
     prevTheme = D.current();
     stampGenerated();
-    D.setTheme("light");   // re-renders charts via onTheme, now with labels
+    D.setTheme("light");   // re-renders charts via onTheme: light palette + labels
+    // A <canvas> won't shrink to the page on its own, so pin it to a fixed size
+    // that fits the printable width of both Letter and A4 (~672px), otherwise the
+    // last days spill off the right margin. 660x234px ≈ the print CSS's 62mm tall.
+    visits.resize({ width: 660, height: 234 });
+    // sunburst is square-ish; pin it to fit the print column (74mm tall in CSS)
+    sunburst.resize({ width: 660, height: 280 });
   }
   function endPrint() {
     if (!printing) return;
     printing = false;
     if (prevTheme) D.setTheme(prevTheme);
+    // beginPrint pinned the canvas to 660x234; ECharts remembers explicit sizes,
+    // so a plain resize() would keep reusing them and leave the chart stuck at
+    // print width. "auto" discards the pin and re-measures the live container.
+    visits.resize({ width: "auto", height: "auto" });
+    sunburst.resize({ width: "auto", height: "auto" });
   }
   var pdfBtn = document.getElementById("download-pdf");
   if (pdfBtn) pdfBtn.addEventListener("click", function () {
@@ -406,6 +455,7 @@
     renderDaily();
     renderVisits();
     D.ready(visitsOverlay);
+    renderSunburst();
     renderAudience();
     renderCategories();
     buildTraction();
